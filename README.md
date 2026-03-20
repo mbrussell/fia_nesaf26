@@ -13,13 +13,13 @@ Foresters, forest managers, forest analysts, students
 ## Learner outcomes 
 
 ### Session 1: 	
-(1) Understand the general framework for how FIA data are collected, e.g., sample intensity, core measurements, and length of measurement cycles.  
-(2) Be able to identify the strengths and limitations of FIA data collection methods and interpretation.
-(3) Learn how to access state-level reports and other reporting tools that summarize forest conditions and trends.
+(1) Understand the general framework for how FIA data are collected, e.g., sample intensity, core measurements, and length of measurement cycles.   
+(2) Be able to identify the strengths and limitations of FIA data collection methods and interpretation. 
+(3) Learn how to access state-level reports and other reporting tools that summarize forest conditions and trends. 
 
 ### Session 2: 
-(1) Understand how to find and utilize specific FIA data tables for specific information needs.
-(2) Become comfortable with using the web-based EVALIDator as a tool to create customized summaries of forest conditions.
-(3) Understand how to use the EVALIDator API for accessing FIA data using R and Python programming languages. 
+(1) Understand how to find and utilize specific FIA data tables for specific information needs.  
+(2) Become comfortable with using the web-based EVALIDator as a tool to create customized summaries of forest conditions.  
+(3) Understand how to use the EVALIDator API for accessing FIA data using R and Python programming languages.   
 
 

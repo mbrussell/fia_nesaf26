@@ -1,0 +1,166 @@
+---
+title: "Get FIA data using the EVALIDator API and R"
+author: "Matt Russell"
+date: "03-20-2026"
+output: html_document
+---
+
+```{r, message=F, warning=F}
+# Load necessary R packages
+library(tidyverse)
+library(httr)
+library(jsonlite)
+library(rlist)
+```
+
+```{r}
+# The function fiadb_api_POST() gets an FIADB-API report and returns the data
+# See description: https://apps.fs.usda.gov/fiadb-api/
+
+fiadb_api_POST <- function(argList){
+  # make request
+  resp <- POST(url="https://apps.fs.usda.gov/fiadb-api/fullreport", 
+               body=argList, encode="form")
+  # parse response from JSON to R list
+  respObj <- content(resp, "parsed", encoding = "ISO-8859-1")
+  # create empty output list
+  outputList <- list()
+  # add estimates data frame to output list
+  outputList[['estimates']] <- as.data.frame(do.call(rbind,respObj$estimates))
+
+  # if estimate includes totals and subtotals, add those data frames to output list
+  if ('subtotals' %in% names(respObj)){
+    subtotals <- list()
+    # one subtotal data frame for each grouping variable
+    for (i in names(respObj$subtotals)){
+      subtotals[[i]] <- as.data.frame(do.call(rbind,respObj$subtotals[[i]]))
+    }
+    outputList[['subtotals']] <- subtotals
+
+    # totals data frame
+    outputList[['totals']] <- as.data.frame(do.call(rbind,respObj$totals))
+  }
+
+  # add estimate metadata
+  outputList[['metadata']] <- respObj$metadata
+
+  return(outputList)
+}
+```
+
+## Example 1: Forestland area by stand age class and ownership group for Maine
+
+```{r}
+# Change the values in arg_list to obtain data
+
+# snum = All of the possible FIA variables. See https://apps.fs.usda.gov/fiadb-api/fullreport/parameters/snum
+# wc = State FIPS code/inventory year of data collections. See: https://apps.fs.usda.gov/fiadb-api/fullreport/parameters/wc
+# rselected = row estimate grouping definition. See: https://apps.fs.usda.gov/fiadb-api/fullreport/parameters/rselected
+# cselected = column estimate grouping definition. See: https://apps.fs.usda.gov/fiadb-api/fullreport/parameters/cselected
+# outputFormat = output format. (NJSON is best in R)
+
+arg_list <- list(snum = 2, # Area of forest land, in acres
+                 wc = 232024, # Maine, 2024
+                 rselected = 'Stand age 20 yr classes (0 to 500 plus)', # Row variable
+                 cselected = 'Ownership group - Major', # Column variable
+                 outputFormat = 'NJSON') # Output format
+
+# Submit argument list to POST request function
+post_data <- fiadb_api_POST(arg_list)
+
+# Gather estimates to make data frame
+forestland_me <- post_data[['estimates']]
+head(forestland_me) 
+```
+
+```{r}
+# Often the data frame returned from the API will need to be cleaned and organized before analysis and visualization. 
+# In this case, we need to convert some variables to numeric.
+# We'll also extract the age class and ownership group from the GRP1 and GRP2 variables, and select only the variables we need for analysis
+
+forestland_me <- as_tibble(forestland_me) |>   
+    mutate(forest_area = as.numeric(ESTIMATE),
+           num_plots = as.numeric(PLOT_COUNT),
+           se = as.numeric(SE),
+           se_percent = as.numeric(SE_PERCENT),
+           var = as.numeric(VARIANCE),
+           age_class = substr(GRP1, 7, nchar(GRP1)),
+           own_group = ifelse(str_detect(GRP2, "Private"), "Private", "Public")) |> 
+  select(age_class, own_group, forest_area, num_plots, se, se_percent, var)
+head(forestland_me)
+
+# Reorder age class factor levels for plotting
+forestland_me$age_class <- factor(forestland_me$age_class, levels = c("0-20 years", "21-40 years", "41-60 years", "61-80 years", "81-100 years", 
+                                                                     "100-120 years", "121-140 years", "141-160 years", "161-180 years", "181-200 years",
+                                                                      "200-220 years"))
+
+# Plot forestland area by age class and ownership group in Maine
+
+ggplot(forestland_me, aes(x = age_class, y = forest_area, fill = own_group)) +
+    geom_bar(stat = "identity") +
+  facet_grid(own_group ~ .) +
+  labs(x = "Stand age class (years)", 
+       y = "Forestland area (acres)",
+       title = "Maine forestland area") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Example 2: Average volume per acre on timberlands by county and forest type group in Vermont
+
+```{r}
+# Change the values in arg_list to obtain data for volume per acre on timberlands by county and forest type group in Vermont.
+# We'll add the sdenom argument to speify timberland area, only
+
+arg_list <- list(snum = 574175, # Sound bole wood volume of live trees (timber species at least 5 inches d.b.h.), in cubic feet, on timberland
+                 sdenom = 3,    # Denominator for per acre estimates (timberland area)
+                 wc = 502024 ,  # Vermont, 2024
+                 rselected = 'Forest type group',    # Row variable
+                 cselected = 'County code and name', # Column variable
+                 outputFormat = 'NJSON') # Output format
+
+# Submit argument list to POST request function
+post_data <- fiadb_api_POST(arg_list)
+
+# Gather estimates to make data frame
+volume_vt <- post_data[['estimates']]
+head(volume_vt) 
+```
+
+```{r}
+# Clean and organize the data frame returned from the API. 
+# In this case, we need to convert some variables to numeric.
+# We'll also extract the forest type group and county from the GRP1 and GRP2 variables, and select only the variables we need for analysis
+volume_vt <- as_tibble(volume_vt) |>   
+    mutate(volume_ac = as.numeric(RATIO_ESTIMATE),
+           num_plots = as.numeric(NUMERATOR_PLOT_COUNT),
+           se = as.numeric(RATIO_SE),
+           se_percent = as.numeric(RATIO_SE_PERCENT),
+           var = as.numeric(RATIO_VAR),
+           forest_type = substr(GRP1, 7, nchar(GRP1)),
+           county = substr(GRP2, 17, nchar(GRP2))) |> 
+  select(county, forest_type, num_plots, volume_ac, se, se_percent, var) |> 
+  relocate(county, forest_type, num_plots, volume_ac, se, se_percent, var) 
+  
+head(volume_vt)
+```
+
+```{r}
+# Plot average volume per acre on timberlands by county and forest type group in Vermont.
+# We'll filter to only include estimates based on at least 5 plots.
+# We'll add error bars to show the standard error of the estimates.
+
+volume_vt |> 
+    filter(num_plots >= 5) |> 
+    ggplot(aes(x = forest_type, y = volume_ac, fill = forest_type)) +
+    geom_bar(stat = "identity") +
+    geom_errorbar(aes(ymin = volume_ac - se, ymax = volume_ac + se), width = 0.2) +
+    coord_flip() +
+  facet_wrap(~ county) +
+  labs(x = "Forest type group", 
+       y = "Volume per acre (cubic feet)",
+       title = "Volume by forest type, Vermont",
+       caption = "Mean +/- one SE") +
+  theme_bw() +
+  theme(legend.position = "none")
+```
